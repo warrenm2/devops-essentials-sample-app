@@ -1,0 +1,58 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- master
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: DownloadSecureFile@1
+  name: prismacloud_auth
+  displayName: 'Download Prisma Secrets'
+  inputs:
+    secureFile: 'prismacloud_auth.json'
+
+- script: |
+    sudo chown root:root $(prismacloud_auth.secureFilePath)
+    sudo chmod a+r $(prismacloud_auth.secureFilePath)
+    cat $(prismacloud_auth.secureFilePath)
+    echo "I am doing pipeline stuff"
+    sudo ln -s -t ./CSPM $(prismacloud_auth.secureFilePath)
+    echo pwd
+    echo cd ./CSPM
+    echo ls -l
+  
+- task: TerraformTaskV3@3
+  inputs:
+    provider: 'azurerm'
+    command: 'init'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/CSPM'
+    backendServiceArm: 'EUI InfoSec Sandbox(156c4776-c622-4aa0-a9e8-e81defb180aa)'
+    backendAzureRmResourceGroupName: 'infosec-ukwest-sandbox-tfstate-rg'
+    backendAzureRmStorageAccountName: 'tfstatebslv8'
+    backendAzureRmContainerName: 'prisma-sb-cspm-tfstate'
+    backendAzureRmKey: $(az-store-key)
+
+- task: TerraformTaskV3@3
+  inputs:
+    provider: 'azurerm'
+    command: 'validate'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/CSPM'
+
+- task: TerraformTaskV3@3
+  inputs:
+    provider: 'azurerm'
+    command: 'plan'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/CSPM'
+    environmentServiceNameAzureRM: 'EUI InfoSec Sandbox(156c4776-c622-4aa0-a9e8-e81defb180aa)'
+
+- task: TerraformTaskV3@3
+  inputs:
+    provider: 'azurerm'
+    command: 'apply'
+    workingDirectory: '$(System.DefaultWorkingDirectory)/CSPM'
+    environmentServiceNameAzureRM: 'EUI InfoSec Sandbox(156c4776-c622-4aa0-a9e8-e81defb180aa)'
